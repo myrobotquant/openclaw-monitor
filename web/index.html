@@ -1,0 +1,906 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>OpenClaw Monitor</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
+            background: #0f0f0f;
+            color: #e0e0e0;
+            min-height: 100vh;
+        }
+        
+        .header {
+            background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+            padding: 1.5rem 2rem;
+            border-bottom: 1px solid #2a2a3e;
+        }
+        
+        .header h1 {
+            font-size: 1.5rem;
+            color: #00d4aa;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+        
+        .header .status {
+            display: flex;
+            gap: 1rem;
+            margin-top: 0.5rem;
+            font-size: 0.85rem;
+            color: #888;
+        }
+        
+        .status-badge {
+            display: flex;
+            align-items: center;
+            gap: 0.3rem;
+        }
+        
+        .status-badge.online::before {
+            content: '';
+            width: 8px;
+            height: 8px;
+            background: #00d4aa;
+            border-radius: 50%;
+            animation: pulse 2s infinite;
+        }
+        
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+        
+        .container {
+            padding: 2rem;
+            max-width: 1400px;
+            margin: 0 auto;
+        }
+        
+        .metrics-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 1rem;
+            margin-bottom: 2rem;
+        }
+        
+        .metric-card {
+            background: #1a1a2e;
+            border: 1px solid #2a2a3e;
+            border-radius: 8px;
+            padding: 1.25rem;
+        }
+        
+        .metric-card h3 {
+            font-size: 0.75rem;
+            text-transform: uppercase;
+            color: #888;
+            margin-bottom: 0.5rem;
+            letter-spacing: 0.05em;
+        }
+        
+        .metric-value {
+            font-size: 1.75rem;
+            font-weight: 600;
+            color: #fff;
+        }
+        
+        .metric-value.cost {
+            color: #00d4aa;
+        }
+        
+        .metric-value.tokens {
+            color: #4a9eff;
+        }
+        
+        .panels {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 1.5rem;
+        }
+        
+        @media (max-width: 900px) {
+            .panels {
+                grid-template-columns: 1fr;
+            }
+        }
+        
+        .panel {
+            background: #1a1a2e;
+            border: 1px solid #2a2a3e;
+            border-radius: 8px;
+            overflow: hidden;
+        }
+        
+        .panel-header {
+            background: #16213e;
+            padding: 1rem 1.25rem;
+            border-bottom: 1px solid #2a2a3e;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        
+        .panel-header h2 {
+            font-size: 0.9rem;
+            font-weight: 500;
+        }
+        
+        .panel-content {
+            max-height: 400px;
+            overflow-y: auto;
+        }
+        
+        .activity-item {
+            padding: 0.875rem 1.25rem;
+            border-bottom: 1px solid #252538;
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+            font-size: 0.85rem;
+        }
+        
+        .activity-item:last-child {
+            border-bottom: none;
+        }
+        
+        .activity-icon {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            flex-shrink: 0;
+        }
+        
+        .activity-icon.command {
+            background: #4a9eff;
+        }
+        
+        .activity-icon.llm {
+            background: #9b59b6;
+        }
+        
+        .activity-icon.process {
+            background: #e74c3c;
+        }
+        
+        .activity-details {
+            flex: 1;
+            min-width: 0;
+        }
+        
+        .activity-name {
+            color: #fff;
+            font-weight: 500;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+        
+        .activity-meta {
+            color: #666;
+            font-size: 0.75rem;
+            margin-top: 0.25rem;
+        }
+        
+        .activity-time {
+            color: #666;
+            font-size: 0.75rem;
+            font-family: monospace;
+        }
+        
+        .cost-breakdown {
+            padding: 1rem;
+        }
+        
+        .cost-row {
+            display: flex;
+            justify-content: space-between;
+            padding: 0.5rem 0;
+            border-bottom: 1px solid #252538;
+            font-size: 0.85rem;
+        }
+        
+        .cost-row:last-child {
+            border-bottom: none;
+            font-weight: 600;
+            color: #00d4aa;
+        }
+        
+        .error-message {
+            padding: 2rem;
+            text-align: center;
+            color: #666;
+        }
+        
+        .live-indicator {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            font-size: 0.75rem;
+            color: #00d4aa;
+        }
+    </style>
+</head>
+<body>
+    <header class="header">
+        <h1>🔮 OpenClaw Monitor</h1>
+        <div class="status">
+            <span class="status-badge online">Live</span>
+            <span id="connection-status">Connecting...</span>
+        </div>
+    </header>
+    
+    <div class="container">
+        <div class="metrics-grid">
+            <div class="metric-card">
+                <h3>Active Sessions</h3>
+                <div class="metric-value" id="active-sessions">-</div>
+            </div>
+            <div class="metric-card">
+                <h3>Commands (24h)</h3>
+                <div class="metric-value" id="total-commands">-</div>
+            </div>
+            <div class="metric-card">
+                <h3>Today's Spend</h3>
+                <div class="metric-value cost" id="today-spend">-</div>
+            </div>
+            <div class="metric-card">
+                <h3>Spend Rate</h3>
+                <div class="metric-value" id="spend-rate" style="color: #f39c12;">-</div>
+            </div>
+            <div class="metric-card">
+                <h3>Moonshot Balance</h3>
+                <div class="metric-value" id="moonshot-balance" style="color: #9b59b6;">-</div>
+            </div>
+        </div>
+        
+        <!-- Agent Status Panel -->
+        <div class="status-panel" id="agent-status-panel" style="background: #1a1a2e; border: 1px solid #2a2a3e; border-radius: 8px; padding: 1.25rem; margin-bottom: 1.5rem;">
+            <div style="display: flex; align-items: center; gap: 1rem;">
+                <div id="status-indicator" style="width: 12px; height: 12px; border-radius: 50%; background: #666;"></div>
+                <div style="flex: 1;">
+                    <div style="font-size: 0.75rem; text-transform: uppercase; color: #888; letter-spacing: 0.05em;">Current Status</div>
+                    <div id="status-text" style="font-size: 1.25rem; font-weight: 600; color: #fff; margin-top: 0.25rem;">Connecting...</div>
+                </div>
+                <div id="status-timer" style="font-family: monospace; color: #666; font-size: 0.9rem;"></div>
+            </div>
+            <div id="current-action" style="margin-top: 0.75rem; padding-top: 0.75rem; border-top: 1px solid #2a2a3e; color: #888; font-size: 0.85rem; display: none;"></div>
+        </div>
+
+        <!-- Agent Logs Panel -->
+        <div class="panel" style="margin-bottom: 1.5rem;">
+            <div class="panel-header">
+                <h2>📝 Agent Logs</h2>
+                <span class="live-indicator">● Live</span>
+            </div>
+            <div class="panel-content" id="agent-logs" style="max-height: 300px; overflow-y: auto; font-family: 'Monaco', 'Menlo', monospace; font-size: 0.8rem;">
+                <div class="error-message">Loading logs...</div>
+            </div>
+        </div>
+
+        <!-- System Transparency Panel -->
+        <div class="panel" style="margin-bottom: 1.5rem; background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);">
+            <div class="panel-header">
+                <h2>🔍 System Transparency (FREE)</h2>
+                <span class="live-indicator" style="color: #00d4aa;">● Live</span>
+            </div>
+            <div class="panel-content">
+                <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1rem; font-size: 0.85rem;">
+                    <div>
+                        <div style="color: #888; font-size: 0.75rem; text-transform: uppercase; margin-bottom: 0.25rem;">System Resources</div>
+                        <div id="sys-cpu">CPU: -</div>
+                        <div id="sys-ram">RAM: -</div>
+                        <div id="sys-disk">Disk: -</div>
+                    </div>
+                    <div>
+                        <div style="color: #888; font-size: 0.75rem; text-transform: uppercase; margin-bottom: 0.25rem;">Processes</div>
+                        <div id="sys-docker">Docker: -</div>
+                        <div id="sys-node">Node.js: -</div>
+                        <div id="sys-python">Python: -</div>
+                    </div>
+                    <div>
+                        <div style="color: #888; font-size: 0.75rem; text-transform: uppercase; margin-bottom: 0.25rem;">Network</div>
+                        <div id="sys-connections">Connections: -</div>
+                        <div id="sys-ports">Listening: -</div>
+                    </div>
+                    <div>
+                        <div style="color: #888; font-size: 0.75rem; text-transform: uppercase; margin-bottom: 0.25rem;">💰 Cost Breakdown</div>
+                        <div id="cost-llm" style="color: #e74c3c;">LLM: -</div>
+                        <div id="cost-web" style="color: #f39c12;">Web: -</div>
+                        <div style="color: #00d4aa;">System: FREE ✓</div>
+                        <div style="color: #00d4aa;">Local: FREE ✓</div>
+                    </div>
+                </div>
+                <div id="current-activity" style="margin-top: 1rem; padding-top: 1rem; border-top: 1px solid #2a2a3e; font-size: 0.8rem; color: #aaa;">
+                    <span style="color: #4a9eff;">ℹ️</span> System checks, file operations, and local commands are FREE. Only LLM calls and external APIs cost money.
+                </div>
+            </div>
+        </div>
+
+        <!-- Weather Panel (Open-Meteo - FREE) -->
+        <div class="panel" style="margin-bottom: 1.5rem; background: linear-gradient(135deg, #1a1a2e 0%, #0f3460 100%);">
+            <div class="panel-header">
+                <h2>🌤️ Weather - Toronto (Open-Meteo)</h2>
+                <span class="live-indicator" style="color: #00d4aa;">● Free API</span>
+            </div>
+            <div class="panel-content">
+                <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 1rem; text-align: center;">
+                    <div>
+                        <div style="font-size: 2.5rem; margin-bottom: 0.5rem;" id="weather-icon">🌡️</div>
+                        <div style="font-size: 1.5rem; font-weight: 600;" id="weather-temp">-</div>
+                        <div style="color: #888; font-size: 0.85rem;" id="weather-desc">-</div>
+                    </div>
+                    <div style="text-align: left; font-size: 0.9rem;">
+                        <div style="margin-bottom: 0.5rem;">💨 Wind: <span id="weather-wind">-</span></div>
+                        <div style="margin-bottom: 0.5rem;">💧 Humidity: <span id="weather-humidity">-</span></div>
+                        <div>🌧️ Precipitation: <span id="weather-precip">-</span></div>
+                    </div>
+                    <div style="text-align: left; font-size: 0.85rem;">
+                        <div style="color: #888; margin-bottom: 0.5rem;">5-Day Forecast:</div>
+                        <div id="weather-forecast" style="line-height: 1.6;">-</div>
+                    </div>
+                </div>
+                <div style="margin-top: 1rem; padding-top: 1rem; border-top: 1px solid #2a2a3e; font-size: 0.75rem; color: #666;">
+                    Source: Open-Meteo (Free, no API key) • Updates every 15 minutes
+                </div>
+            </div>
+        </div>
+
+        <div class="panels">
+            <div class="panel">
+                <div class="panel-header">
+                    <h2>📊 Recent Activity</h2>
+                    <span class="live-indicator">● Live</span>
+                </div>
+                <div class="panel-content" id="activity-feed">
+                    <div class="error-message">Waiting for data...</div>
+                </div>
+            </div>
+
+            <div class="panel">
+                <div class="panel-header">
+                    <h2>💰 Cost Breakdown</h2>
+                </div>
+                <div class="panel-content">
+                    <div class="cost-breakdown" id="cost-breakdown">
+                        <div class="error-message">Loading...</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <script>
+        const API_URL = window.location.hostname === 'localhost' 
+            ? 'http://localhost:8081/api' 
+            : '/api';
+        
+        const WS_URL = window.location.hostname === 'localhost'
+            ? 'ws://localhost:8082'
+            : 'ws://192.168.99.150:8082';
+        
+        let activities = [];
+        
+        // Format numbers
+        function formatNumber(num) {
+            if (num === null || num === undefined) return '-';
+            return new Intl.NumberFormat().format(num);
+        }
+        
+        // Format currency
+        function formatCurrency(num) {
+            if (num === null || num === undefined) return '-';
+            return '$' + num.toFixed(4);
+        }
+        
+        // Format time (Eastern Standard Time) - Human readable with date and AM/PM
+        function formatTime(timestamp) {
+            // Parse the UTC timestamp and format as EST
+            const utcDate = new Date(timestamp + 'Z');
+            
+            // Format to EST with date and AM/PM
+            return utcDate.toLocaleString('en-US', { 
+                month: 'short',
+                day: 'numeric',
+                hour: 'numeric', 
+                minute: '2-digit', 
+                second: '2-digit',
+                hour12: true,
+                timeZone: 'America/New_York'
+            });
+        }
+        
+        // Fetch summary
+        async function fetchSummary() {
+            try {
+                const response = await fetch(`${API_URL}/dashboard/summary`);
+                const data = await response.json();
+                
+                document.getElementById('active-sessions').textContent = formatNumber(data.active_sessions);
+                document.getElementById('total-commands').textContent = formatNumber(data.total_commands);
+                document.getElementById('total-tokens').textContent = formatNumber(data.total_input_tokens + data.total_output_tokens);
+                document.getElementById('total-cost').textContent = formatCurrency(data.total_cost);
+            } catch (err) {
+                console.error('Failed to fetch summary:', err);
+            }
+        }
+        
+        // Fetch cost breakdown - COMBINES real Moonshot total + per-model estimates
+        async function fetchCosts() {
+            try {
+                // Get REAL total from Moonshot
+                const spendResponse = await fetch(`${API_URL}/moonshot/spend`);
+                const spendData = await spendResponse.json();
+                
+                // Get per-model estimates from our tracked data
+                const costsResponse = await fetch(`${API_URL}/dashboard/costs`);
+                const costsData = await costsResponse.json();
+                
+                const container = document.getElementById('cost-breakdown');
+                
+                if (!spendData.total_tracked) {
+                    container.innerHTML = '<div class="error-message">Collecting data...</div>';
+                    return;
+                }
+                
+                const realSpent = spendData.total_tracked.spent;
+                const realHourlyRate = spendData.total_tracked.hourly_rate;
+                const hours = spendData.total_tracked.hours;
+                const currentBalance = spendData.current_balance;
+                const dailyRate = realHourlyRate * 24;
+                const daysRemaining = dailyRate > 0 ? currentBalance / dailyRate : 0;
+                
+                let html = '';
+                
+                // REAL totals from Moonshot
+                html += `
+                    <div class="cost-row" style="color: #e74c3c; font-weight: 600; border-bottom: 1px solid #333; padding-bottom: 8px; margin-bottom: 8px;">
+                        <span>💰 ACTUAL SPENT (Today)</span>
+                        <span>$${realSpent.toFixed(2)}</span>
+                    </div>
+                `;
+                
+                // Per-model breakdown (estimated from tracked calls)
+                if (costsData && costsData.length > 0) {
+                    // Calculate ratio to scale estimates to real total
+                    const trackedTotal = costsData.reduce((sum, row) => sum + row.cost, 0);
+                    const scaleFactor = trackedTotal > 0 ? realSpent / trackedTotal : 1;
+                    
+                    html += `<div style="color: #888; font-size: 0.75rem; margin-bottom: 8px;">📋 Per-Model Breakdown (estimated):</div>`;
+                    
+                    costsData.forEach(row => {
+                        const scaledCost = row.cost * scaleFactor;
+                        html += `
+                            <div class="cost-row" style="font-size: 0.85rem;">
+                                <span style="color: #aaa;">${row.date} - ${row.model}</span>
+                                <span>$${scaledCost.toFixed(4)} (${row.request_count} reqs)</span>
+                            </div>
+                        `;
+                    });
+                    
+                    html += `
+                        <div class="cost-row" style="color: #666; font-size: 0.75rem; border-top: 1px solid #333; padding-top: 8px; margin-top: 8px;">
+                            <span>Tracked (under-reports by ~90%)</span>
+                            <span>$${trackedTotal.toFixed(4)}</span>
+                        </div>
+                    `;
+                }
+                
+                // Summary stats
+                html += `
+                    <div style="margin-top: 12px; padding-top: 12px; border-top: 2px solid #333;">
+                        <div class="cost-row">
+                            <span>📊 Current Balance</span>
+                            <span style="color: #9b59b6;">$${currentBalance.toFixed(2)}</span>
+                        </div>
+                        <div class="cost-row">
+                            <span>⚡ Burn Rate</span>
+                            <span>$${realHourlyRate.toFixed(2)}/hr ($${dailyRate.toFixed(2)}/day)</span>
+                        </div>
+                        <div class="cost-row">
+                            <span>⏱️ Time Tracked</span>
+                            <span>${hours.toFixed(1)} hours</span>
+                        </div>
+                        <div class="cost-row" style="color: ${daysRemaining < 3 ? '#e74c3c' : daysRemaining < 7 ? '#f39c12' : '#00d4aa'};">
+                            <span>📅 Balance Will Last</span>
+                            <span>~${daysRemaining.toFixed(1)} days</span>
+                        </div>
+                    </div>
+                `;
+                
+                container.innerHTML = html;
+            } catch (err) {
+                console.error('Failed to fetch costs:', err);
+                document.getElementById('cost-breakdown').innerHTML = '<div class="error-message">Unable to load cost data</div>';
+            }
+        }
+        
+        // Fetch recent activity from API
+        async function fetchRecentActivity() {
+            try {
+                const response = await fetch(`${API_URL}/dashboard/recent?limit=50`);
+                const data = await response.json();
+                
+                if (data && data.length > 0) {
+                    activities = data.map(item => ({
+                        type: item.type,
+                        name: item.type === 'llm' ? `${item.name} (${item.duration_ms} tokens)` : item.name,
+                        timestamp: item.timestamp,
+                        session_id: item.session_id
+                    }));
+                    renderActivity();
+                }
+            } catch (err) {
+                console.error('Failed to fetch recent activity:', err);
+            }
+        }
+        
+        // Agent Status Tracking
+        let statusTimer = null;
+        let statusStartTime = null;
+        
+        function updateStatusDisplay(status) {
+            const indicator = document.getElementById('status-indicator');
+            const text = document.getElementById('status-text');
+            const timer = document.getElementById('status-timer');
+            const action = document.getElementById('current-action');
+            
+            // Colors and labels
+            const statusConfig = {
+                'idle': { color: '#00d4aa', label: 'IDLE', icon: '🟢' },
+                'thinking': { color: '#f1c40f', label: 'THINKING', icon: '🟡' },
+                'busy': { color: '#e74c3c', label: 'BUSY', icon: '🔴' },
+                'error': { color: '#9b59b6', label: 'ERROR', icon: '⚠️' }
+            };
+            
+            const config = statusConfig[status.state] || statusConfig['idle'];
+            
+            indicator.style.background = config.color;
+            text.textContent = `${config.icon} ${config.label}`;
+            text.style.color = config.color;
+            
+            // Show current action if busy
+            if (status.state === 'busy' && status.current_action) {
+                action.style.display = 'block';
+                action.textContent = `→ ${status.current_action}`;
+                statusStartTime = status.action_start_time ? new Date(status.action_start_time) : new Date();
+                startStatusTimer();
+            } else if (status.state === 'thinking') {
+                action.style.display = 'block';
+                action.textContent = '→ Reasoning through approach...';
+                statusStartTime = status.action_start_time ? new Date(status.action_start_time) : new Date();
+                startStatusTimer();
+            } else {
+                action.style.display = 'none';
+                stopStatusTimer();
+                timer.textContent = '';
+            }
+        }
+        
+        function startStatusTimer() {
+            stopStatusTimer();
+            const timer = document.getElementById('status-timer');
+            
+            statusTimer = setInterval(() => {
+                if (statusStartTime) {
+                    const elapsed = Date.now() - statusStartTime.getTime();
+                    const seconds = (elapsed / 1000).toFixed(1);
+                    timer.textContent = `${seconds}s`;
+                }
+            }, 100);
+        }
+        
+        function stopStatusTimer() {
+            if (statusTimer) {
+                clearInterval(statusTimer);
+                statusTimer = null;
+            }
+        }
+        
+        // Fetch agent status
+        async function fetchAgentStatus() {
+            try {
+                const response = await fetch(`${API_URL}/agent/status`);
+                const data = await response.json();
+                updateStatusDisplay(data);
+            } catch (err) {
+                console.error('Failed to fetch agent status:', err);
+                document.getElementById('status-text').textContent = '⚠️ Disconnected';
+                document.getElementById('status-indicator').style.background = '#666';
+            }
+        }
+        
+        // Render activity feed
+        function renderActivity() {
+            const container = document.getElementById('activity-feed');
+            
+            if (activities.length === 0) {
+                container.innerHTML = '<div class="error-message">Waiting for data...</div>';
+                return;
+            }
+            
+            container.innerHTML = activities.slice(0, 50).map(item => `
+                <div class="activity-item">
+                    <div class="activity-icon ${item.type}"></div>
+                    <div class="activity-details">
+                        <div class="activity-name">${escapeHtml(item.name)}</div>
+                        <div class="activity-meta">${item.type.toUpperCase()} • ${escapeHtml(item.session_id?.slice(0, 8) || 'unknown')}</div>
+                    </div>
+                    <div class="activity-time">${formatTime(item.timestamp)}</div>
+                </div>
+            `).join('');
+        }
+        
+        // Escape HTML
+        function escapeHtml(text) {
+            if (!text) return '';
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
+        
+        // WebSocket connection
+        function connectWebSocket() {
+            const ws = new WebSocket(WS_URL);
+            
+            ws.onopen = () => {
+                document.getElementById('connection-status').textContent = 'Connected';
+                document.getElementById('connection-status').style.color = '#00d4aa';
+            };
+            
+            ws.onmessage = (event) => {
+                const data = JSON.parse(event.data);
+                
+                if (data.type === 'command') {
+                    activities.unshift({
+                        type: 'command',
+                        name: data.data.tool_name,
+                        timestamp: data.data.timestamp,
+                        session_id: data.data.session_id
+                    });
+                } else if (data.type === 'llm') {
+                    activities.unshift({
+                        type: 'llm',
+                        name: `${data.data.model} (${data.data.total_tokens} tokens)`,
+                        timestamp: data.data.timestamp,
+                        session_id: data.data.session_id
+                    });
+                } else if (data.type === 'process_start') {
+                    activities.unshift({
+                        type: 'process',
+                        name: `Process started: ${data.data.command}`,
+                        timestamp: new Date().toISOString(),
+                        session_id: data.data.session_id
+                    });
+                }
+                
+                // Keep last 100
+                activities = activities.slice(0, 100);
+                renderActivity();
+                
+                // Refresh summary on activity
+                fetchSummary();
+            };
+            
+            ws.onclose = () => {
+                document.getElementById('connection-status').textContent = 'Disconnected - Reconnecting...';
+                document.getElementById('connection-status').style.color = '#e74c3c';
+                setTimeout(connectWebSocket, 3000);
+            };
+            
+            ws.onerror = (err) => {
+                console.error('WebSocket error:', err);
+            };
+        }
+        
+        // Fetch Moonshot balance and spend data
+        async function fetchMoonshotBalance() {
+            try {
+                // Get current balance
+                const balanceResponse = await fetch(`${API_URL}/moonshot/balance`);
+                const balanceData = await balanceResponse.json();
+                
+                if (balanceData.available_balance !== undefined) {
+                    document.getElementById('moonshot-balance').textContent = '$' + balanceData.available_balance.toFixed(2);
+                } else {
+                    document.getElementById('moonshot-balance').textContent = 'Error';
+                }
+                
+                // Get spend analysis
+                const spendResponse = await fetch(`${API_URL}/moonshot/spend`);
+                const spendData = await spendResponse.json();
+                
+                if (spendData.total_tracked) {
+                    // Today's spend (total since we started tracking)
+                    document.getElementById('today-spend').textContent = '$' + spendData.total_tracked.spent.toFixed(2);
+                    
+                    // Hourly rate
+                    if (spendData.total_tracked.hourly_rate) {
+                        document.getElementById('spend-rate').textContent = '$' + spendData.total_tracked.hourly_rate.toFixed(2) + '/hr';
+                    }
+                } else {
+                    document.getElementById('today-spend').textContent = '-';
+                    document.getElementById('spend-rate').textContent = '-';
+                }
+            } catch (err) {
+                console.error('Failed to fetch Moonshot data:', err);
+                document.getElementById('moonshot-balance').textContent = '-';
+                document.getElementById('today-spend').textContent = '-';
+                document.getElementById('spend-rate').textContent = '-';
+            }
+        }
+        
+        // Fetch and display agent logs
+        async function fetchAgentLogs() {
+            try {
+                const response = await fetch(`${API_URL}/logs?lines=30`);
+                const data = await response.json();
+                
+                const container = document.getElementById('agent-logs');
+                
+                if (!data.logs || data.logs.length === 0) {
+                    container.innerHTML = '<div class="error-message">No logs available</div>';
+                    return;
+                }
+                
+                const typeColors = {
+                    'user': '#4a9eff',
+                    'assistant': '#00d4aa',
+                    'tool': '#f39c12',
+                    'result': '#95a5a6',
+                    'system': '#9b59b6'
+                };
+                
+                const typeLabels = {
+                    'user': 'USER',
+                    'assistant': 'AI',
+                    'tool': 'TOOL',
+                    'result': 'DONE',
+                    'system': 'SYS'
+                };
+                
+                container.innerHTML = data.logs.map(log => {
+                    const color = typeColors[log.type] || '#888';
+                    const label = typeLabels[log.type] || log.type.toUpperCase();
+                    return `
+                        <div style="padding: 4px 0; border-bottom: 1px solid #252538;">
+                            <span style="color: #666; font-size: 0.7rem;">${log.time}</span>
+                            <span style="color: ${color}; font-weight: 600; margin-left: 8px; font-size: 0.7rem;">${label}</span>
+                            <span style="color: #ccc; margin-left: 8px;">${escapeHtml(log.message)}</span>
+                        </div>
+                    `;
+                }).join('');
+                
+                // Auto-scroll to bottom
+                container.scrollTop = container.scrollHeight;
+            } catch (err) {
+                console.error('Failed to fetch logs:', err);
+                document.getElementById('agent-logs').innerHTML = '<div class="error-message">Failed to load logs</div>';
+            }
+        }
+        
+        // Fetch system metrics (FREE - runs locally)
+        async function fetchSystemMetrics() {
+            try {
+                const response = await fetch(`${API_URL}/system/metrics`);
+                const data = await response.json();
+                
+                document.getElementById('sys-cpu').textContent = `CPU: ${data.cpu}%`;
+                document.getElementById('sys-ram').textContent = `RAM: ${data.ram}`;
+                document.getElementById('sys-disk').textContent = `Disk: ${data.disk}`;
+                document.getElementById('sys-docker').textContent = `Docker: ${data.docker} containers`;
+                document.getElementById('sys-node').textContent = `Node.js: ${data.node} processes`;
+                document.getElementById('sys-python').textContent = `Python: ${data.python} processes`;
+                document.getElementById('sys-connections').textContent = `Connections: ${data.connections}`;
+                document.getElementById('sys-ports').textContent = `Listening: ${data.ports} ports`;
+            } catch (err) {
+                console.error('Failed to fetch system metrics:', err);
+            }
+        }
+        
+        // Update cost breakdown from Moonshot spend data
+        async function updateCostBreakdown() {
+            try {
+                const response = await fetch(`${API_URL}/moonshot/spend`);
+                const data = await response.json();
+                
+                if (data.total_tracked) {
+                    const totalSpent = data.total_tracked.spent.toFixed(2);
+                    const hourlyRate = data.total_tracked.hourly_rate.toFixed(2);
+                    
+                    // Update cost breakdown in System Transparency panel
+                    document.getElementById('cost-llm').innerHTML = `LLM: $${totalSpent} <span style="color: #666; font-size: 0.75rem;">($${hourlyRate}/hr)</span>`;
+                    document.getElementById('cost-web').textContent = `Web: $0.00`;  // Web searches are minimal
+                }
+            } catch (err) {
+                console.error('Failed to update cost breakdown:', err);
+            }
+        }
+        
+        // Fetch weather from Open-Meteo (FREE)
+        async function fetchWeather() {
+            try {
+                const response = await fetch(`${API_URL}/weather/open-meteo`);
+                const data = await response.json();
+                
+                // Current weather
+                document.getElementById('weather-temp').textContent = `${Math.round(data.current.temperature)}°C`;
+                document.getElementById('weather-desc').textContent = data.current.description;
+                document.getElementById('weather-wind').textContent = `${data.current.windSpeed} km/h`;
+                document.getElementById('weather-humidity').textContent = `${data.current.humidity}%`;
+                document.getElementById('weather-precip').textContent = `${data.current.precipitation} mm`;
+                
+                // Weather icon
+                const iconMap = {
+                    0: '☀️', 1: '🌤️', 2: '⛅', 3: '☁️',
+                    45: '🌫️', 48: '🌫️', 51: '🌧️', 53: '🌧️', 55: '🌧️',
+                    61: '🌧️', 63: '🌧️', 65: '🌧️', 71: '🌨️', 73: '🌨️',
+                    75: '🌨️', 77: '🌨️', 80: '🌦️', 81: '🌦️', 82: '🌦️',
+                    95: '⛈️', 96: '⛈️', 99: '⛈️'
+                };
+                document.getElementById('weather-icon').textContent = iconMap[data.current.code] || '🌡️';
+                
+                // Forecast
+                const forecastHtml = data.forecast.map(day => {
+                    const date = new Date(day.date);
+                    const dayName = date.toLocaleDateString('en-US', { weekday: 'short' });
+                    return `<div>${dayName}: ${Math.round(day.max)}°/${Math.round(day.min)}° ${iconMap[day.code] || '🌡️'}</div>`;
+                }).join('');
+                document.getElementById('weather-forecast').innerHTML = forecastHtml;
+                
+            } catch (err) {
+                console.error('Failed to fetch weather:', err);
+                document.getElementById('weather-desc').textContent = 'Unable to load weather';
+            }
+        }
+        
+        // Initial load - wait for DOM
+        document.addEventListener('DOMContentLoaded', () => {
+            console.log('DOM loaded, fetching initial data...');
+            fetchSummary();
+            fetchCosts();
+            fetchRecentActivity();
+            fetchAgentStatus();
+            fetchMoonshotBalance();
+            fetchAgentLogs();
+            fetchSystemMetrics();
+            updateCostBreakdown();
+            fetchWeather();
+            connectWebSocket();
+        });
+        
+        // Refresh summary every 30 seconds
+        setInterval(fetchSummary, 30000);
+        
+        // Refresh costs every 5 minutes
+        setInterval(fetchCosts, 300000);
+        
+        // Refresh agent status every 5 seconds
+        setInterval(fetchAgentStatus, 5000);
+        
+        // Refresh Moonshot balance every 60 seconds
+        setInterval(fetchMoonshotBalance, 60000);
+        
+        // Refresh logs every 10 seconds
+        setInterval(fetchAgentLogs, 10000);
+        
+        // Refresh system metrics every 5 seconds (FREE!)
+        setInterval(fetchSystemMetrics, 5000);
+        
+        // Refresh cost breakdown every 30 seconds
+        setInterval(updateCostBreakdown, 30000);
+        
+        // Refresh weather every 15 minutes (FREE!)
+        setInterval(fetchWeather, 900000);
+    </script>
+</body>
+</html>
