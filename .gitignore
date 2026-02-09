@@ -1,0 +1,35 @@
+# Environment variables and secrets
+.env
+.env.local
+.env.*.local
+*.key
+*.secret
+tokens.json
+
+# Node modules
+node_modules/
+npm-debug.log*
+
+# Data directories
+data/*.db
+data/*.json
+
+# Generated outputs
+sd-outputs/
+*.png
+*.jpg
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Logs
+*.log
+logs/
